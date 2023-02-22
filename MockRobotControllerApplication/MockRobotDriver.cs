@@ -22,7 +22,7 @@ namespace MockRobotControllerApplication
             port = 1000;
 
             ConnectionState = EConnectionState.Disconnected;
-            State = EState.Uninitialized;
+            LastCommand = EProcesses.None;
 
             processes = new Dictionary<EProcesses, string>
             {
@@ -36,7 +36,7 @@ namespace MockRobotControllerApplication
         public event EventHandler CommandTerminatedWithError;
 
         public EConnectionState ConnectionState { get; private set; }
-        public EState State { get; private set; }
+        public EProcesses LastCommand { get; private set; }
         public ESubState SubState { get; private set; }
 
         public bool Connect(string ip)
@@ -67,24 +67,25 @@ namespace MockRobotControllerApplication
 
             if (processID > 0)
             {
-                State = (EState)processID;
+                LastCommand = (EProcesses)processID;
             }
         }
 
         internal void cycle()
         {
-            if(State > EState.Idle)
-            {
-                SubState = StatusCommand((int)State);
+            SubState = StatusCommand((int)LastCommand);
 
-                if (SubState == ESubState.FinishedSuccessfully)
-                {
-                    OnCommandFinishedSuccessfully();
-                }
-                else if (SubState == ESubState.TerminatedWithError)
-                {
-                    OnCommandTerminatedWithError();
-                }
+            if (SubState == ESubState.InProgress)
+            {
+                // Process is running
+            }
+            if (SubState == ESubState.FinishedSuccessfully)
+            {
+                OnCommandFinishedSuccessfully();
+            }
+            else if (SubState == ESubState.TerminatedWithError)
+            {
+                OnCommandTerminatedWithError();
             }
         }
 
@@ -185,13 +186,11 @@ namespace MockRobotControllerApplication
 
         private void OnCommandFinishedSuccessfully()
         {
-            State = EState.Idle;
             CommandFinishedSuccessfully?.Invoke(this, EventArgs.Empty);
         }
 
         private void OnCommandTerminatedWithError()
         {
-            State = EState.Uninitialized;
             CommandTerminatedWithError?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -204,15 +203,6 @@ namespace MockRobotControllerApplication
         Disconnecting,
     }
 
-    public enum EState
-    {
-        Uninitialized,
-        Idle,
-        Homing=10,
-        Picking=20,
-        Placing=30,
-    }
-
     public enum ESubState
     {
         InProgress,
@@ -220,8 +210,12 @@ namespace MockRobotControllerApplication
         TerminatedWithError,
     }
 
+    /// <summary>
+    /// Represenst process IDs
+    /// </summary>
     public enum EProcesses
     {
+        None,
         Homing=10,
         Picking=20,
         Placing=30,

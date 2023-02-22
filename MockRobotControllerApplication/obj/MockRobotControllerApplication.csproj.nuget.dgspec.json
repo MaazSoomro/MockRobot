@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\VisualStudioProjects\\MockRobotControllerApplication\\MockRobotControllerApplication\\MockRobotControllerApplication.csproj": {}
+    "C:\\VisualStudioProjects\\MockRobotControllerApplication\\MockRobot\\MockRobotControllerApplication\\MockRobotControllerApplication.csproj": {}
   },
   "projects": {
-    "C:\\VisualStudioProjects\\MockRobotControllerApplication\\MockRobotControllerApplication\\MockRobotControllerApplication.csproj": {
+    "C:\\VisualStudioProjects\\MockRobotControllerApplication\\MockRobot\\MockRobotControllerApplication\\MockRobotControllerApplication.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\VisualStudioProjects\\MockRobotControllerApplication\\MockRobotControllerApplication\\MockRobotControllerApplication.csproj",
+        "projectUniqueName": "C:\\VisualStudioProjects\\MockRobotControllerApplication\\MockRobot\\MockRobotControllerApplication\\MockRobotControllerApplication.csproj",
         "projectName": "MockRobotControllerApplication",
-        "projectPath": "C:\\VisualStudioProjects\\MockRobotControllerApplication\\MockRobotControllerApplication\\MockRobotControllerApplication.csproj",
+        "projectPath": "C:\\VisualStudioProjects\\MockRobotControllerApplication\\MockRobot\\MockRobotControllerApplication\\MockRobotControllerApplication.csproj",
         "packagesPath": "C:\\Users\\muham\\.nuget\\packages\\",
-        "outputPath": "C:\\VisualStudioProjects\\MockRobotControllerApplication\\MockRobotControllerApplication\\obj\\",
+        "outputPath": "C:\\VisualStudioProjects\\MockRobotControllerApplication\\MockRobot\\MockRobotControllerApplication\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\muham\\AppData\\Roaming\\NuGet\\NuGet.Config",
