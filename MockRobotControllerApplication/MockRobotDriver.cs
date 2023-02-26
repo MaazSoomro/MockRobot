@@ -13,7 +13,7 @@ namespace MockRobotControllerApplication
 
         private TcpClient m_TcpClient;
         private NetworkStream m_NetStream;
-
+        private EConnectionState m_ConnectionState;
         private readonly Dictionary<EProcessId, string> m_Processes;
 
 
@@ -32,10 +32,25 @@ namespace MockRobotControllerApplication
             };
         }
 
+        public event EventHandler ConnectionStateChanged;
+        public event EventHandler CommandExecutionStarted;
         public event EventHandler CommandFinishedSuccessfully;
         public event EventHandler CommandTerminatedWithError;
 
-        public EConnectionState ConnectionState { get; private set; }
+        public event EventHandler<EProcessId> ProcessAlreadyRunning;
+
+        public EConnectionState ConnectionState
+        {
+            get => m_ConnectionState;
+            private set
+            {
+                if (m_ConnectionState != value)
+                {
+                    m_ConnectionState = value;
+                    ConnectionStateChanged?.Invoke(this, EventArgs.Empty);
+                }
+            }
+        }
         public EProcessId LastProcessId { get; private set; }
         public ESubState SubState { get; private set; }
 
@@ -62,7 +77,18 @@ namespace MockRobotControllerApplication
 
         public void Disconnect()
         {
+            if (m_NetStream.CanRead)
+            {
+                // Read the server message into a byte buffer.
+                byte[] bytes = new byte[1024];
+                m_NetStream.Read(bytes, 0, 1024);
+                //Convert the server's message into a string and display it.
+                string data = Encoding.UTF8.GetString(bytes);
+                Console.WriteLine("Server sent message: {0}", data);
+            }
 
+            m_NetStream.Close();
+            m_TcpClient.Close();
         }
 
         public void Home()
@@ -73,7 +99,12 @@ namespace MockRobotControllerApplication
             if (processID > 0)
             {
                 LastProcessId = (EProcessId)processID;
+                CommandExecutionStarted?.Invoke(this, EventArgs.Empty);
                 //StatusCommand(processID);
+            }
+            else
+            {
+                ProcessAlreadyRunning?.Invoke(this, LastProcessId);
             }
         }
 
@@ -86,7 +117,12 @@ namespace MockRobotControllerApplication
             if (processID > 0)
             {
                 LastProcessId = (EProcessId)processID;
+                CommandExecutionStarted?.Invoke(this, EventArgs.Empty);
                 //StatusCommand(processID);
+            }
+            else
+            {
+                ProcessAlreadyRunning?.Invoke(this, LastProcessId);
             }
         }
 
@@ -99,29 +135,42 @@ namespace MockRobotControllerApplication
             if (processID > 0)
             {
                 LastProcessId = (EProcessId)processID;
+                CommandExecutionStarted?.Invoke(this, EventArgs.Empty);
                 //StatusCommand(processID);
+            }
+            else
+            {
+                ProcessAlreadyRunning?.Invoke(this, LastProcessId);
             }
         }
 
         internal void cycle()
         {
-            if (SubState == ESubState.InProgress)
+            //if (m_TcpClient != null)
+            //{
+            //    ConnectionState = m_TcpClient.Connected == true ? EConnectionState.Connected : EConnectionState.Disconnected;
+            //}
+
+            if (ConnectionState == EConnectionState.Connected)
             {
                 if (SubState == ESubState.InProgress)
                 {
-                    // Process is running
-                }
-                else if (SubState == ESubState.FinishedSuccessfully)
-                {
-                    OnCommandFinishedSuccessfully();
-                }
-                else if (SubState == ESubState.TerminatedWithError)
-                {
-                    OnCommandTerminatedWithError();
-                }
-                else
-                {
-                    // Control cannot reach here
+                    if (SubState == ESubState.InProgress)
+                    {
+                        // Process is running
+                    }
+                    else if (SubState == ESubState.FinishedSuccessfully)
+                    {
+                        OnCommandFinishedSuccessfully();
+                    }
+                    else if (SubState == ESubState.TerminatedWithError)
+                    {
+                        OnCommandTerminatedWithError();
+                    }
+                    else
+                    {
+                        // Communication error handling
+                    }
                 }
             }
 
@@ -138,18 +187,11 @@ namespace MockRobotControllerApplication
 
             if (isSuccessful)
             {
-                if (processID < 0)
-                {
-                    return -2;      // another process running
-                }
-                else
-                {
-                    return processID;
-                }
+                return processID;
             }
             else
             {
-                return -3;          // invalid return value from command
+                throw new Exception($"Invalid response received from command {process}.");
             }
 
         }
@@ -158,30 +200,40 @@ namespace MockRobotControllerApplication
         {
             string commandName = "status";
             string[] parameters = { $"processID" };
-            var returnValue = Command(commandName, parameters);
+            try
+            {
+                var returnValue = Command(commandName, parameters);
 
-            if (returnValue == "In Progress")
-            {
-                return ESubState.InProgress;
-            }
-            else if (returnValue == "Finished Successfully")
-            {
-                return ESubState.FinishedSuccessfully;
-            }
-            else if (returnValue == "Terminated With Error")
-            {
-                return ESubState.TerminatedWithError;
-            }
-            else
-            {
-                if (returnValue == "-1")
+                if (returnValue == "In Progress")
                 {
-                    throw new Exception("Custom Exception: Connection broken down");
+                    return ESubState.InProgress;
+                }
+                else if (returnValue == "Finished Successfully")
+                {
+                    return ESubState.FinishedSuccessfully;
+                }
+                else if (returnValue == "Terminated With Error")
+                {
+                    return ESubState.TerminatedWithError;
                 }
                 else
                 {
-                    throw new Exception("Custom exception: A problem with the response from status command");
+                    if (returnValue == "-1" || returnValue == "-2" || returnValue == "-3")
+                    {
+                        //throw new Exception("Custom Exception: Connection broken down");
+                        ConnectionState = EConnectionState.Disconnected;
+                        return ESubState.CommunicationError;
+                    }
+                    else
+                    {
+                        throw new Exception($"Invalid response received during StatusCommand. Response: {returnValue}");
+                    }
                 }
+            }
+            catch (Exception)
+            {
+                ConnectionState = EConnectionState.Disconnected;
+                throw;
             }
         }
 
@@ -197,22 +249,38 @@ namespace MockRobotControllerApplication
             if (!m_TcpClient.Connected)
             {
                 ConnectionState = EConnectionState.Disconnected;
-                return "-1";      // assuming that -1 is not reserved
+                return "-1";      // Not connected
             }
 
-            string parameters_flattened = string.Join("%", parameters);
-            string command = $"{commandName}%{parameters_flattened}";
 
-            byte[] commandBytes = Encoding.ASCII.GetBytes(command);
-            m_NetStream.Write(commandBytes, 0, commandBytes.Length);
+            if (m_NetStream.CanWrite)
+            {
+                string parameters_flattened = string.Join("%", parameters);
+                string command = $"{commandName}%{parameters_flattened}";
 
-            byte[] responseBytes = new byte[1024];
-            int bytesRead = m_NetStream.Read(responseBytes, 0, responseBytes.Length);
-            string response = Encoding.ASCII.GetString(responseBytes, 0, bytesRead);
+                byte[] commandBytes = Encoding.ASCII.GetBytes(command);
+                m_NetStream.Write(commandBytes, 0, commandBytes.Length);
+            }
+            else
+            {
+                return "-2";        // Cannot write
+            }
 
-            string parsedResponse = ParseResponse(response);
+            if (m_NetStream.CanRead)
+            {
+                byte[] responseBytes = new byte[1024];
+                int bytesRead = m_NetStream.Read(responseBytes, 0, responseBytes.Length);
+                string response = Encoding.ASCII.GetString(responseBytes, 0, bytesRead);
 
-            return parsedResponse;
+                string parsedResponse = ParseResponse(response);
+
+                return parsedResponse;
+            }
+            else
+            {
+                return "-3";        // Cannot read
+            }
+
         }
 
         private string ParseResponse(string data)
@@ -247,6 +315,7 @@ namespace MockRobotControllerApplication
         InProgress,
         FinishedSuccessfully,
         TerminatedWithError,
+        CommunicationError,
     }
 
     /// <summary>
@@ -265,8 +334,18 @@ namespace MockRobotControllerApplication
     /// </summary>
     public enum ELocationId
     {
+        None,
         Loc1,
         Loc2,
         Loc3,
+    }
+
+    public enum EErrorId : int
+    {
+        None=0,
+        NotConnected=-1,
+        CannotWrite=-2,
+        CannotRead=-3,
+        InvalidReturnValue=-4,
     }
 }
