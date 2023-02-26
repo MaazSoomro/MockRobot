@@ -11,10 +11,10 @@ namespace MockRobotControllerApplication
     {
         private readonly int port;
 
-        private TcpClient tcpClient;
-        private NetworkStream netStream;
+        private TcpClient m_TcpClient;
+        private NetworkStream m_NetStream;
 
-        private readonly Dictionary<EProcesses, string> processes;
+        private readonly Dictionary<EProcessId, string> m_Processes;
 
 
         internal MockRobotDriver()
@@ -22,13 +22,13 @@ namespace MockRobotControllerApplication
             port = 1000;
 
             ConnectionState = EConnectionState.Disconnected;
-            LastCommand = EProcesses.None;
+            LastProcessId = EProcessId.None;
 
-            processes = new Dictionary<EProcesses, string>
+            m_Processes = new Dictionary<EProcessId, string>
             {
-                { EProcesses.Homing, "home"},
-                { EProcesses.Picking, "pick" },
-                { EProcesses.Placing, "place" },
+                { EProcessId.Home, "home"},
+                { EProcessId.Pick, "pick" },
+                { EProcessId.Place, "place" },
             };
         }
 
@@ -36,19 +36,19 @@ namespace MockRobotControllerApplication
         public event EventHandler CommandTerminatedWithError;
 
         public EConnectionState ConnectionState { get; private set; }
-        public EProcesses LastCommand { get; private set; }
+        public EProcessId LastProcessId { get; private set; }
         public ESubState SubState { get; private set; }
 
         public bool Connect(string ip)
         {
             ConnectionState = EConnectionState.Connecting;
 
-            tcpClient = new TcpClient();
-            tcpClient.Connect(ip, port);
+            m_TcpClient = new TcpClient();
+            m_TcpClient.Connect(ip, port);
 
-            netStream = tcpClient.GetStream();
+            m_NetStream = m_TcpClient.GetStream();
 
-            if (tcpClient.Connected)
+            if (m_TcpClient.Connected)
             {
                 ConnectionState = EConnectionState.Connected;
                 return true;
@@ -60,38 +60,77 @@ namespace MockRobotControllerApplication
             }
         }
 
+        public void Disconnect()
+        {
+
+        }
+
         public void Home()
         {
             var parameters = new string[] { "" };
-            var processID = ProcessCommand(EProcesses.Homing, parameters);
+            var processID = ProcessCommand(EProcessId.Home, parameters);
 
             if (processID > 0)
             {
-                LastCommand = (EProcesses)processID;
+                LastProcessId = (EProcessId)processID;
+                //StatusCommand(processID);
+            }
+        }
+
+        public void Pick(ELocationId sourceLocation)
+        {
+            int locId = (int)sourceLocation;
+            var parameters = new string[] { locId.ToString() };
+            var processID = ProcessCommand(EProcessId.Pick, parameters);
+
+            if (processID > 0)
+            {
+                LastProcessId = (EProcessId)processID;
+                //StatusCommand(processID);
+            }
+        }
+
+        public void Place(ELocationId destLocation)
+        {
+            int locId = (int)destLocation;
+            var parameters = new string[] { locId.ToString() };
+            var processID = ProcessCommand(EProcessId.Place, parameters);
+
+            if (processID > 0)
+            {
+                LastProcessId = (EProcessId)processID;
+                //StatusCommand(processID);
             }
         }
 
         internal void cycle()
         {
-            SubState = StatusCommand((int)LastCommand);
-
             if (SubState == ESubState.InProgress)
             {
-                // Process is running
+                if (SubState == ESubState.InProgress)
+                {
+                    // Process is running
+                }
+                else if (SubState == ESubState.FinishedSuccessfully)
+                {
+                    OnCommandFinishedSuccessfully();
+                }
+                else if (SubState == ESubState.TerminatedWithError)
+                {
+                    OnCommandTerminatedWithError();
+                }
+                else
+                {
+                    // Control cannot reach here
+                }
             }
-            if (SubState == ESubState.FinishedSuccessfully)
-            {
-                OnCommandFinishedSuccessfully();
-            }
-            else if (SubState == ESubState.TerminatedWithError)
-            {
-                OnCommandTerminatedWithError();
-            }
+
+            SubState = StatusCommand((int)LastProcessId);
         }
 
-        private int ProcessCommand(EProcesses process, string[] parameters)
+        private int ProcessCommand(EProcessId process, string[] parameters)
         {
-            string commandName = processes[process];
+            string commandName = m_Processes[process];
 
             var returnValue = Command(commandName, parameters);
 
@@ -155,7 +194,7 @@ namespace MockRobotControllerApplication
         /// <returns>processID or the status</returns>
         private string Command(string commandName, string[] parameters)
         {
-            if (!tcpClient.Connected)
+            if (!m_TcpClient.Connected)
             {
                 ConnectionState = EConnectionState.Disconnected;
                 return "-1";      // assuming that -1 is not reserved
@@ -165,10 +204,10 @@ namespace MockRobotControllerApplication
             string command = $"{commandName}%{parameters_flattened}";
 
             byte[] commandBytes = Encoding.ASCII.GetBytes(command);
-            netStream.Write(commandBytes, 0, commandBytes.Length);
+            m_NetStream.Write(commandBytes, 0, commandBytes.Length);
 
             byte[] responseBytes = new byte[1024];
-            int bytesRead = netStream.Read(responseBytes, 0, responseBytes.Length);
+            int bytesRead = m_NetStream.Read(responseBytes, 0, responseBytes.Length);
             string response = Encoding.ASCII.GetString(responseBytes, 0, bytesRead);
 
             string parsedResponse = ParseResponse(response);
@@ -213,11 +252,21 @@ namespace MockRobotControllerApplication
     /// <summary>
     /// Represenst process IDs
     /// </summary>
-    public enum EProcesses
+    public enum EProcessId
     {
         None,
-        Homing=10,
-        Picking=20,
-        Placing=30,
+        Home=10,
+        Pick=20,
+        Place=30,
+    }
+
+    /// <summary>
+    /// Location as an enum
+    /// </summary>
+    public enum ELocationId
+    {
+        Loc1,
+        Loc2,
+        Loc3,
     }
 }
