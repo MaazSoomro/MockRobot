@@ -81,6 +81,12 @@ namespace MockRobotControllerApplication
 
         public void Abort()
         {
+            // Ideally, abort would first stop all running functions and then disconnect
+
+            m_IsCommandRunning = false;
+            m_IsTransfer = false;
+            m_NextState = EDriverState.Uninitialized;
+            DriverState = EDriverState.Uninitialized;
             m_Driver.Disconnect();
         }
 
@@ -127,6 +133,18 @@ namespace MockRobotControllerApplication
                 return;
             }
 
+            if (DriverState == EDriverState.Uninitialized)
+            {
+                // driver is not yet initialized
+                return;
+            }
+
+            if (ConnectionState != EConnectionState.Connected)
+            {
+                // driver not connected
+                return;
+            }
+
             var isSuccessful = int.TryParse(parameterValues[0], out var src);
 
             if (isSuccessful)
@@ -156,6 +174,18 @@ namespace MockRobotControllerApplication
             if (parameterNames[0] != "Destination Location")
             {
                 // error handling
+                return;
+            }
+
+            if (DriverState == EDriverState.Uninitialized)
+            {
+                // driver is not yet initialized
+                return;
+            }
+
+            if (ConnectionState != EConnectionState.Connected)
+            {
+                // driver not connected
                 return;
             }
 
@@ -191,6 +221,18 @@ namespace MockRobotControllerApplication
             if(src_i == -1 || dest_i == -1)
             {
                 // error handling
+                return;
+            }
+
+            if (DriverState == EDriverState.Uninitialized)
+            {
+                // driver is not yet initialized
+                return;
+            }
+
+            if (ConnectionState != EConnectionState.Connected)
+            {
+                // driver not connected
                 return;
             }
 
